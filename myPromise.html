@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>原生Js仿Promise源码</title></title>
+</head>
+
+<body>
+    <h1>原生Js仿写Promise</h1>
+    <script>
+        // 三种状态： 1、padding 初始状态。 2、fulfilled 成功状态。 3、rejected 失败状态。
+        class myPromise {
+            constructor(handle) {
+                this.state = 'padding'
+                this.value = undefined
+                this._onResolve = []
+                this._onRejected = []
+                handle(
+                    this._resolve.bind(this),
+                    this._reject.bind(this)
+                )
+            }
+            // 成功状态
+            _resolve(val) {
+                this.state = 'fulfilled'
+                this.value = val
+                const run = () => {
+                    // 依次执行队列中的方法
+                    let cb;
+                    while (cb = this._onResolve.shift()) {
+                        cb && cb(val)
+                    }
+                }
+                // 监听节点的变化，作用：把宏观任务变成微观任务
+                const observer = new MutationObserver(run)
+                observer.observe(document.body, { attributes: true })
+                document.body.setAttribute('a', Math.round())
+            }
+            // 失败状态
+            _reject(val) {
+                this.state = 'rejected'
+                this.value = val
+                const run = () => {
+                    // 依次执行队列中的方法
+                    let cb;
+                    while (cb = this._onRejected.shift()) {
+                        cb && cb(val)
+                    }
+                }
+                // 监听节点的变化，作用：把宏观任务变成微观任务
+                const observer = new MutationObserver(run)
+                observer.observe(document.body, { attributes: true })
+                document.body.setAttribute('a', Math.round())
+            }
+            // 错误捕获
+            catch(cb) {
+                return this.then(undefined, cb)
+            }
+            // 全部成功后执行
+            static all(lists) {
+                return new myPromise(resolve => {
+                    let num = 0
+                    let arr = [];
+                    // 收集请求完成的次数
+                    lists.forEach(item => {
+                        item.then(res => {
+                            arr.push(res)
+                            num++
+                            if (num === lists.length) {
+                                resolve(arr)
+                            }
+                        })
+                    });
+                })
+            }
+
+            // 一个成功后执行
+            static race(lists) {
+                return new myPromise((resolve, reject) => {
+                    lists.forEach(item => {
+                        item.then(res => {
+                            resolve(res)
+                        }, err => {
+                            reject(err)
+                        })
+                    })
+                })
+            }
+
+            static resolve(val) {
+                return new myPromise(resolve => {
+                    resolve(val)
+                })
+            }
+
+            static reject(val) {
+                return new myPromise(undefined, reject => {
+                    reject(val)
+                })
+            }
+
+            then(onResolve, onRejected) {
+                // 链式操作，连续.then
+                return new myPromise((resolve, reject) => {
+                    let resolveFn = val => {
+                        // 得到上一次的结果
+                        let res = onResolve && onResolve(val)
+                        // 如果返回的是promise就直接then,否则返回上一次的结果
+                        if (res instanceof myPromise) {
+                            res.then(resolve)
+                        } else {
+                            resolve(res)
+                        }
+                    }
+                    let rejectFn = val => {
+                        onRejected && onRejected(val)
+                        reject(val)
+                    }
+                    // 收集.then的次数(非链式操作)
+                    this._onResolve.push(resolveFn)
+                    this._onRejected.push(rejectFn)
+                })
+            }
+        }
+
+        let p1 = new myPromise((resolve, reject) => {
+            resolve(11)
+        })
+        let p2 = new myPromise((resolve, reject) => {
+            resolve(22)
+        })
+        let a = myPromise.race([p1, p2]).then(res => {
+            console.log(res);
+        });
+    </script>
+</body>
+
+</html>
